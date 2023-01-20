@@ -12,3 +12,7 @@ categories = ["web-programming::http-server", "web-programming", "database"]
 [dependencies]
 async-session = "3.0.0"
 fred = "5.2.0"
+futures = "0.3.25"
+
+[dev-dependencies]
+tokio = { version = "1.24.2", features = ["macros"]}
