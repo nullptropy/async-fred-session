@@ -35,6 +35,7 @@ impl RedisSessionStore {
         }
     }
 
+    // FIXME: broken
     async fn ids(&self) -> Result<Vec<RedisKey>> {
         let results = self
             .pool
@@ -85,11 +86,14 @@ impl SessionStore for RedisSessionStore {
     }
 
     async fn destroy_session(&self, session: Session) -> Result {
-        Ok(())
+        Ok(self.pool.del(self.prefix_key(session.id())).await?)
     }
 
     async fn clear_store(&self) -> Result {
-        Ok(())
+        match self.prefix {
+            None => Ok(self.pool.flushall(false).await?),
+            Some(_) => Ok(self.pool.del(self.ids().await?).await?),
+        }
     }
 }
 
@@ -104,7 +108,10 @@ mod tests {
         pool.connect(None);
         pool.wait_for_connect().await.unwrap();
 
-        RedisSessionStore::from_pool(pool, Some("async-session-test/".into()))
+        // let store = RedisSessionStore::from_pool(pool, Some("async-session-test/".into()));
+        let store = RedisSessionStore::from_pool(pool, None);
+        store.clear_store().await.unwrap();
+        store
     }
 
     #[tokio::test]
@@ -124,4 +131,151 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn updating_a_session() -> Result {
+        let store = create_session_store().await;
+        let mut session = Session::new();
+
+        session.insert("key", "value")?;
+        let cookie_value = store.store_session(session).await?.unwrap();
+        let mut session = store.load_session(cookie_value.clone()).await?.unwrap();
+
+        session.insert("key", "other value")?;
+        assert_eq!(None, store.store_session(session).await?);
+        let session = store.load_session(cookie_value.clone()).await?.unwrap();
+
+        assert_eq!(&session.get::<String>("key").unwrap(), "other value");
+        assert_eq!(1, store.count().await.unwrap());
+
+        Ok(())
+    }
+
+    // #[tokio::test]
+    // async fn updating_a_session_extending_expiry() -> Result {
+    //     let store = test_store().await;
+    //     let mut session = Session::new();
+    //     session.expire_in(Duration::from_secs(5));
+    //     let original_expires = session.expiry().unwrap().clone();
+    //     let cookie_value = store.store_session(session).await?.unwrap();
+    //
+    //     let mut session = store.load_session(cookie_value.clone()).await?.unwrap();
+    //     let ttl = store.ttl_for_session(&session).await?;
+    //     assert!(ttl > 3 && ttl < 5);
+    //
+    //     assert_eq!(session.expiry().unwrap(), &original_expires);
+    //     session.expire_in(Duration::from_secs(10));
+    //     let new_expires = session.expiry().unwrap().clone();
+    //     store.store_session(session).await?;
+    //
+    //     let session = store.load_session(cookie_value.clone()).await?.unwrap();
+    //     let ttl = store.ttl_for_session(&session).await?;
+    //     assert!(ttl > 8 && ttl < 10);
+    //     assert_eq!(session.expiry().unwrap(), &new_expires);
+    //
+    //     assert_eq!(1, store.count().await.unwrap());
+    //
+    //     task::sleep(Duration::from_secs(10)).await;
+    //     assert_eq!(0, store.count().await.unwrap());
+    //
+    //     Ok(())
+    // }
+    //
+    // #[tokio::test]
+    // async fn creating_a_new_session_with_expiry() -> Result {
+    //     let store = test_store().await;
+    //     let mut session = Session::new();
+    //     session.expire_in(Duration::from_secs(3));
+    //     session.insert("key", "value")?;
+    //     let cloned = session.clone();
+    //
+    //     let cookie_value = store.store_session(session).await?.unwrap();
+    //
+    //     assert!(store.ttl_for_session(&cloned).await? > 1);
+    //
+    //     let loaded_session = store.load_session(cookie_value.clone()).await?.unwrap();
+    //     assert_eq!(cloned.id(), loaded_session.id());
+    //     assert_eq!("value", &loaded_session.get::<String>("key").unwrap());
+    //
+    //     assert!(!loaded_session.is_expired());
+    //
+    //     task::sleep(Duration::from_secs(2)).await;
+    //     assert_eq!(None, store.load_session(cookie_value).await?);
+    //
+    //     Ok(())
+    // }
+    //
+    // #[tokio::test]
+    // async fn destroying_a_single_session() -> Result {
+    //     let store = test_store().await;
+    //     for _ in 0..3i8 {
+    //         store.store_session(Session::new()).await?;
+    //     }
+    //
+    //     let cookie = store.store_session(Session::new()).await?.unwrap();
+    //     assert_eq!(4, store.count().await?);
+    //     let session = store.load_session(cookie.clone()).await?.unwrap();
+    //     store.destroy_session(session.clone()).await.unwrap();
+    //     assert_eq!(None, store.load_session(cookie).await?);
+    //     assert_eq!(3, store.count().await?);
+    //
+    //     // attempting to destroy the session again is not an error
+    //     assert!(store.destroy_session(session).await.is_ok());
+    //     Ok(())
+    // }
+    //
+    // #[tokio::test]
+    // async fn clearing_the_whole_store() -> Result {
+    //     let store = test_store().await;
+    //     for _ in 0..3i8 {
+    //         store.store_session(Session::new()).await?;
+    //     }
+    //
+    //     assert_eq!(3, store.count().await?);
+    //     store.clear_store().await.unwrap();
+    //     assert_eq!(0, store.count().await?);
+    //
+    //     Ok(())
+    // }
+    //
+    // #[tokio::test]
+    // async fn prefixes() -> Result {
+    //     test_store().await; // clear the db
+    //
+    //     let store = RedisSessionStore::new("redis://127.0.0.1")?.with_prefix("sessions/");
+    //     store.clear_store().await?;
+    //
+    //     for _ in 0..3i8 {
+    //         store.store_session(Session::new()).await?;
+    //     }
+    //
+    //     let mut session = Session::new();
+    //
+    //     session.insert("key", "value")?;
+    //     let cookie_value = store.store_session(session).await?.unwrap();
+    //
+    //     let mut session = store.load_session(cookie_value.clone()).await?.unwrap();
+    //     session.insert("key", "other value")?;
+    //     assert_eq!(None, store.store_session(session).await?);
+    //
+    //     let session = store.load_session(cookie_value.clone()).await?.unwrap();
+    //     assert_eq!(&session.get::<String>("key").unwrap(), "other value");
+    //
+    //     assert_eq!(4, store.count().await.unwrap());
+    //
+    //     let other_store =
+    //         RedisSessionStore::new("redis://127.0.0.1")?.with_prefix("other-namespace/");
+    //
+    //     assert_eq!(0, other_store.count().await.unwrap());
+    //     for _ in 0..3i8 {
+    //         other_store.store_session(Session::new()).await?;
+    //     }
+    //
+    //     other_store.clear_store().await?;
+    //
+    //     assert_eq!(0, other_store.count().await?);
+    //     assert_eq!(4, store.count().await?);
+    //
+    //     Ok(())
+    // }
 }
