@@ -16,6 +16,12 @@ pub struct RedisSessionStore {
     prefix: Option<String>,
 }
 
+impl std::fmt::Debug for RedisSessionStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 impl RedisSessionStore {
     pub fn from_pool(pool: RedisPool, prefix: Option<String>) -> Self {
         Self { pool, prefix }
@@ -54,13 +60,38 @@ impl RedisSessionStore {
     }
 }
 
-// #[async_trait]
-// impl SessionStore for RedisSessionStore {
-//     async fn load_session(&self, cookie_value: String) -> Result<Option<Session>> {}
-//     async fn store_session(&self, session: Session) -> Result<Option<String>> {}
-//     async fn destroy_session(&self, session: Session) -> Result {}
-//     async fn clear_store(&self) -> Result {}
-// }
+#[async_trait]
+impl SessionStore for RedisSessionStore {
+    async fn load_session(&self, cookie_value: String) -> Result<Option<Session>> {
+        let id = Session::id_from_cookie_value(&cookie_value)?;
+        Ok(self
+            .pool
+            .get::<Option<String>, String>(self.prefix_key(&id))
+            .await?
+            .map(|v| serde_json::from_str(&v))
+            .transpose()?)
+    }
+
+    async fn store_session(&self, session: Session) -> Result<Option<String>> {
+        let id = self.prefix_key(session.id());
+        let string = serde_json::to_string(&session)?;
+        let expiration = session
+            .expires_in()
+            .map(|d| Expiration::PXAT(d.as_millis() as i64));
+
+        self.pool.set(id, string, expiration, None, false).await?;
+
+        Ok(session.into_cookie_value())
+    }
+
+    async fn destroy_session(&self, session: Session) -> Result {
+        Ok(())
+    }
+
+    async fn clear_store(&self) -> Result {
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -76,18 +107,21 @@ mod tests {
         RedisSessionStore::from_pool(pool, Some("async-session-test/".into()))
     }
 
-    // #[tokio::test]
-    // async fn creating_a_new_session_with_no_expiry() -> Result {
-    //     let store = create_session_store();
-    //     let mut session = Session::new();
-    //     session.insert("key", "Hello")?;
-    //     let cloned = session.clone();
-    //     let cookie_value = store.store_session(session).await?.unwrap();
-    //     let loaded_session = store.load_session(cookie_value).await?.unwrap();
-    //     assert_eq!(cloned.id(), loaded_session.id());
-    //     assert_eq!("Hello", &loaded_session.get::<String>("key").unwrap());
-    //     assert!(!loaded_session.is_expired());
-    //     assert!(loaded_session.validate().is_some());
-    //     Ok(())
-    // }
+    #[tokio::test]
+    async fn creating_a_new_session_with_no_expiry() -> Result {
+        let store = create_session_store().await;
+        let mut session = Session::new();
+        session.insert("key", "Hello")?;
+
+        let cloned = session.clone();
+        let cookie_value = store.store_session(session).await?.unwrap();
+        let loaded_session = store.load_session(cookie_value).await?.unwrap();
+
+        assert_eq!(cloned.id(), loaded_session.id());
+        assert_eq!("Hello", &loaded_session.get::<String>("key").unwrap());
+        assert!(!loaded_session.is_expired());
+        assert!(loaded_session.validate().is_some());
+
+        Ok(())
+    }
 }
