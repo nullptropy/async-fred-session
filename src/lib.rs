@@ -1,7 +1,7 @@
 #![forbid(unsafe_code, future_incompatible)]
 #![allow(dead_code, unused_imports, unused_variables)]
 
-use async_session::{async_trait, serde_json, Session, SessionStore};
+use async_session::{async_trait, serde_json, Result, Session, SessionStore};
 use fred::{
     clients::RedisClient,
     pool::RedisPool,
@@ -21,23 +21,29 @@ impl RedisSessionStore {
         Self { pool, prefix }
     }
 
-    async fn ids(&self) -> Option<Vec<RedisKey>> {
-        let mut results = Vec::new();
-        let mut scanner = self
-            .pool
-            .scan(self.prefix_key("*"), None, Some(ScanType::String));
+    pub async fn count(&self) -> Result<usize> {
+        if self.prefix.is_none() {
+            Ok(self.pool.dbsize().await?)
+        } else {
+            Ok(self.ids().await?.len())
+        }
+    }
 
-        while let Some(Ok(page)) = scanner.next().await {
-            if let Some(keys) = page.results() {
-                results.extend_from_slice(&keys);
+    async fn ids(&self) -> Result<Vec<RedisKey>> {
+        let results = self
+            .pool
+            .scan(self.prefix_key("*"), None, None)
+            .collect::<Vec<_>>()
+            .await;
+        let mut rds_keys = Vec::new();
+
+        for res in results.into_iter() {
+            if let Some(keys) = res?.take_results() {
+                rds_keys.extend_from_slice(&keys)
             }
         }
 
-        if results.is_empty() {
-            None
-        } else {
-            Some(results)
-        }
+        Ok(rds_keys)
     }
 
     fn prefix_key(&self, key: &str) -> String {
