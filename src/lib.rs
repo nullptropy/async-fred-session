@@ -55,6 +55,11 @@ impl RedisSessionStore {
             Some(prefix) => format!("{prefix}{key}"),
         }
     }
+
+    #[cfg(test)]
+    async fn ttl_for_session(&self, session: &Session) -> Result<usize> {
+        Ok(self.pool.ttl(self.prefix_key(session.id())).await?)
+    }
 }
 
 #[async_trait]
