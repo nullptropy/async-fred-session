@@ -28,29 +28,25 @@ impl RedisSessionStore {
     }
 
     pub async fn count(&self) -> Result<usize> {
-        if self.prefix.is_none() {
-            Ok(self.pool.dbsize().await?)
-        } else {
-            Ok(self.ids().await?.len())
+        match self.prefix {
+            None => Ok(self.pool.dbsize().await?),
+            Some(_) => Ok(self.ids().await?.map_or(0, |v| v.len())),
         }
     }
 
-    // FIXME: broken
-    async fn ids(&self) -> Result<Vec<RedisKey>> {
-        let results = self
+    async fn ids(&self) -> Result<Option<Vec<RedisKey>>> {
+        let mut result = Vec::new();
+        let mut scanner = self
             .pool
-            .scan(self.prefix_key("*"), None, None)
-            .collect::<Vec<_>>()
-            .await;
-        let mut rds_keys = Vec::new();
+            .scan(self.prefix_key("*"), None, Some(ScanType::String));
 
-        for res in results.into_iter() {
+        while let Some(res) = scanner.next().await {
             if let Some(keys) = res?.take_results() {
-                rds_keys.extend_from_slice(&keys)
+                result.extend_from_slice(&keys);
             }
         }
 
-        Ok(rds_keys)
+        Ok((!result.is_empty()).then_some(result))
     }
 
     fn prefix_key(&self, key: &str) -> String {
@@ -92,7 +88,10 @@ impl SessionStore for RedisSessionStore {
     async fn clear_store(&self) -> Result {
         match self.prefix {
             None => Ok(self.pool.flushall(false).await?),
-            Some(_) => Ok(self.pool.del(self.ids().await?).await?),
+            Some(_) => match self.ids().await? {
+                None => Ok(()),
+                Some(ids) => Ok(self.pool.del(ids).await?),
+            },
         }
     }
 }
@@ -108,8 +107,7 @@ mod tests {
         pool.connect(None);
         pool.wait_for_connect().await.unwrap();
 
-        // let store = RedisSessionStore::from_pool(pool, Some("async-session-test/".into()));
-        let store = RedisSessionStore::from_pool(pool, None);
+        let store = RedisSessionStore::from_pool(pool, Some("async-session-test/".into()));
         store.clear_store().await.unwrap();
         store
     }
