@@ -1,3 +1,26 @@
+//! # async-fred-session
+//! Redis backed session store for async-session using fred.rs.
+//! ```rust
+//! use async_fred_session::RedisSessionStore;
+//! use async_session::{Session, SessionStore};
+//! use fred::{pool::RedisPool, prelude::*};
+//!
+//! // pool creation
+//! let config = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
+//! let rds_pool = RedisPool::new(config, 6).unwrap();
+//! rds_pool.connect(None);
+//! rds_pool.wait_for_connect().await.unwrap();
+//!
+//! // store and session
+//! let store = RedisSessionStore::from_pool(rds_pool, Some("async-fred-session/".into()));
+//! let mut session = Session::new();
+//! session.insert("key", "value").unwrap();
+//!
+//! let cookie_value = store.store_session(session).await.unwrap().unwrap();
+//! let session = store.load_session(cookie_value).await.unwrap().unwrap();
+//! assert_eq!(&session.get::<String>("key").unwrap(), "value");
+//! ```
+
 #![forbid(unsafe_code, future_incompatible)]
 
 use async_session::{async_trait, serde_json, Result, Session, SessionStore};
@@ -21,10 +44,19 @@ impl std::fmt::Debug for RedisSessionStore {
 }
 
 impl RedisSessionStore {
+    /// creates a redis store from an existing [`fred::pool::RedisPool`]
+    /// ```rust
+    /// let conf = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
+    /// let pool = RedisPool::new(conf, 6).unwrap();
+    /// pool.connect(None);
+    /// pool.wait_for_connect().await.unwrap();
+    /// let store = RedisSessionStore::from_pool(pool, Some("async-fred-session/".into()));
+    /// ```
     pub fn from_pool(pool: RedisPool, prefix: Option<String>) -> Self {
         Self { pool, prefix }
     }
 
+    /// returns the number of sessions in this store
     pub async fn count(&self) -> Result<usize> {
         match self.prefix {
             None => Ok(self.pool.dbsize().await?),
