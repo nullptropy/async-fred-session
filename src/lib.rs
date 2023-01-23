@@ -1,6 +1,8 @@
 //! # async-fred-session
 //! Redis backed session store for async-session using fred.rs.
 //! ```rust
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() {
 //! use async_fred_session::RedisSessionStore;
 //! use async_session::{Session, SessionStore};
 //! use fred::{pool::RedisPool, prelude::*};
@@ -19,6 +21,7 @@
 //! let cookie_value = store.store_session(session).await.unwrap().unwrap();
 //! let session = store.load_session(cookie_value).await.unwrap().unwrap();
 //! assert_eq!(&session.get::<String>("key").unwrap(), "value");
+//! # }
 //! ```
 
 #![forbid(unsafe_code, future_incompatible)]
@@ -46,11 +49,18 @@ impl std::fmt::Debug for RedisSessionStore {
 impl RedisSessionStore {
     /// creates a redis store from an existing [`fred::pool::RedisPool`]
     /// ```rust
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() {
+    /// use async_fred_session::RedisSessionStore;
+    /// use async_session::{Session, SessionStore};
+    /// use fred::{pool::RedisPool, prelude::*};
+    ///
     /// let conf = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
     /// let pool = RedisPool::new(conf, 6).unwrap();
     /// pool.connect(None);
     /// pool.wait_for_connect().await.unwrap();
     /// let store = RedisSessionStore::from_pool(pool, Some("async-fred-session/".into()));
+    /// # }
     /// ```
     pub fn from_pool(pool: RedisPool, prefix: Option<String>) -> Self {
         Self { pool, prefix }
