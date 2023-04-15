@@ -4,7 +4,7 @@
 [![docs.rs](https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square)](https://docs.rs/async-fred-session)
 [![crates.io](https://img.shields.io/crates/v/async-fred-session.svg)](https://crates.io/crates/async-fred-session)
 
-Redis backed session store for [async-session](https://github.com/http-rs/async-session) using [fred.rs](https://github.com/aembke/fred.rs). This work is mostly based on [async-redis-session](https://crates.io/crates/async-redis-session).
+Redis backed session store for [async-session](https://github.com/http-rs/async-session) using [fred.rs](https://github.com/aembke/fred.rs).
 
 ```rust
 use async_fred_session::RedisSessionStore;
@@ -13,8 +13,8 @@ use fred::{pool::RedisPool, prelude::*};
 
 // pool creation
 let config = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
-let rds_pool = RedisPool::new(config, 6).unwrap();
-rds_pool.connect(None);
+let rds_pool = RedisPool::new(config, None, None, 6).unwrap();
+rds_pool.connect();
 rds_pool.wait_for_connect().await.unwrap();
 
 // store and session

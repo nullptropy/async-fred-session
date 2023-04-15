@@ -9,8 +9,8 @@
 //!
 //! // pool creation
 //! let config = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
-//! let rds_pool = RedisPool::new(config, 6).unwrap();
-//! rds_pool.connect(None);
+//! let rds_pool = RedisPool::new(config, None, None, 6).unwrap();
+//! rds_pool.connect();
 //! rds_pool.wait_for_connect().await.unwrap();
 //!
 //! // store and session
@@ -30,7 +30,7 @@ use async_session::{async_trait, serde_json, Result, Session, SessionStore};
 use fred::{
     pool::RedisPool,
     prelude::*,
-    types::{RedisKey, ScanType},
+    types::{RedisKey, ScanType, Scanner},
 };
 use futures::stream::StreamExt;
 
@@ -56,8 +56,8 @@ impl RedisSessionStore {
     /// use fred::{pool::RedisPool, prelude::*};
     ///
     /// let conf = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
-    /// let pool = RedisPool::new(conf, 6).unwrap();
-    /// pool.connect(None);
+    /// let pool = RedisPool::new(conf, None, None, 6).unwrap();
+    /// pool.connect();
     /// pool.wait_for_connect().await.unwrap();
     /// let store = RedisSessionStore::from_pool(pool, Some("async-fred-session/".into()));
     /// # }
@@ -149,9 +149,9 @@ mod tests {
 
     async fn create_session_store() -> RedisSessionStore {
         let conf = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
-        let pool = RedisPool::new(conf, 6).unwrap();
+        let pool = RedisPool::new(conf, None, None, 6).unwrap();
 
-        pool.connect(None);
+        pool.connect();
         pool.wait_for_connect().await.unwrap();
 
         let store = RedisSessionStore::from_pool(pool, Some("async-session-test/".into()));
