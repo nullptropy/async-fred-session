@@ -3,9 +3,8 @@
 //! ```rust
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() {
-//! use async_fred_session::RedisSessionStore;
+//! use async_fred_session::{RedisSessionStore, fred::{pool::RedisPool, types::RedisConfig}};
 //! use async_session::{Session, SessionStore};
-//! use fred::{pool::RedisPool, prelude::*};
 //!
 //! // pool creation
 //! let config = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
@@ -25,6 +24,8 @@
 //! ```
 
 #![forbid(unsafe_code, future_incompatible)]
+
+pub use fred;
 
 use async_session::{async_trait, serde_json, Result, Session, SessionStore};
 use fred::{
