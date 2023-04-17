@@ -7,9 +7,8 @@
 Redis backed session store for [async-session](https://github.com/http-rs/async-session) using [fred.rs](https://github.com/aembke/fred.rs).
 
 ```rust
-use async_fred_session::RedisSessionStore;
+use async_fred_session::{RedisSessionStore, fred::{pool::RedisPool, types::RedisConfig}};
 use async_session::{Session, SessionStore};
-use fred::{pool::RedisPool, prelude::*};
 
 // pool creation
 let config = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
