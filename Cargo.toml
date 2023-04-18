@@ -1,6 +1,6 @@
 [package]
 name = "async-fred-session"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["brkp <brkp@tutanota.com>"]
 edition = "2021"
 description = "redis session store for async-session backed by fred.rs"
